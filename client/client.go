@@ -162,6 +162,7 @@ func (c *QQClient) Login() (*LoginResponse, error) {
 		return nil, err
 	}
 	c.Online = true
+	go c.ReloadGroupList()
 	go c.netLoop()
 	seq, packet := c.buildLoginPacket()
 	rsp, err := c.sendAndWait(seq, packet)
