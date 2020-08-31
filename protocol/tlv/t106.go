@@ -3,7 +3,7 @@ package tlv
 import (
 	"crypto/md5"
 	binary2 "encoding/binary"
-	"github.com/Mrs4s/MiraiGo/binary"
+	"github.com/myxtype/MiraiGo/binary"
 	"math/rand"
 	"time"
 )

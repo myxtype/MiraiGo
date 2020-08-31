@@ -1,4 +1,4 @@
-module github.com/Mrs4s/MiraiGo
+module github.com/myxtype/MiraiGo
 
 go 1.14
 

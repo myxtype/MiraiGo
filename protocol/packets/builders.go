@@ -1,7 +1,7 @@
 package packets
 
 import (
-	"github.com/Mrs4s/MiraiGo/binary"
+	"github.com/myxtype/MiraiGo/binary"
 	"strconv"
 )
 

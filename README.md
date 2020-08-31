@@ -4,8 +4,6 @@ qq-android协议的golang实现 移植于mirai
 # 警告
 本项目为协议实现，api非常原始，并不推荐使用。
 
-建议基于 [go-cqhttp](https://github.com/Mrs4s/go-cqhttp) 使用框架开发。
-
 # 已完成功能/开发计划
 #### 登录
 - [x] 账号密码登录

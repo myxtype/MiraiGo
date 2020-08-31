@@ -3,7 +3,7 @@ package crypto
 import (
 	"crypto/md5"
 	"crypto/rand"
-	"github.com/Mrs4s/MiraiGo/binary"
+	"github.com/myxtype/MiraiGo/binary"
 	"math/big"
 )
 

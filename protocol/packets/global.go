@@ -2,8 +2,8 @@ package packets
 
 import (
 	"errors"
-	"github.com/Mrs4s/MiraiGo/binary"
-	"github.com/Mrs4s/MiraiGo/protocol/crypto"
+	"github.com/myxtype/MiraiGo/binary"
+	"github.com/myxtype/MiraiGo/protocol/crypto"
 	"strconv"
 )
 

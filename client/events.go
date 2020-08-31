@@ -2,7 +2,7 @@ package client
 
 import (
 	"fmt"
-	"github.com/Mrs4s/MiraiGo/message"
+	"github.com/myxtype/MiraiGo/message"
 	"sync"
 )
 

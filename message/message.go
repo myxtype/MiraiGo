@@ -2,9 +2,9 @@ package message
 
 import (
 	"crypto/md5"
-	"github.com/Mrs4s/MiraiGo/binary"
-	"github.com/Mrs4s/MiraiGo/client/pb/msg"
-	"github.com/Mrs4s/MiraiGo/utils"
+	"github.com/myxtype/MiraiGo/binary"
+	"github.com/myxtype/MiraiGo/client/pb/msg"
+	"github.com/myxtype/MiraiGo/utils"
 	"github.com/golang/protobuf/proto"
 	"math"
 	"reflect"
