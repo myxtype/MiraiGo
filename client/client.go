@@ -206,7 +206,6 @@ func (c *QQClient) Login() (*LoginResponse, error) {
 		return nil, err
 	}
 	go c.netLoop()
-	go c.ReloadGroupList()
 	seq, packet := c.buildLoginPacket()
 	rsp, err := c.sendAndWait(seq, packet)
 	if err != nil {
@@ -249,6 +248,7 @@ func (c *QQClient) SubmitSMS(code string) (*LoginResponse, error) {
 func (c *QQClient) init() {
 	c.Online = true
 	c.registerClient()
+	c.ReloadGroupList()
 	c.groupSysMsgCache, _ = c.GetGroupSystemMessages()
 	if !c.heartbeatEnabled {
 		c.startHeartbeat()
