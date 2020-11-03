@@ -23,7 +23,6 @@ func (c *QQClient) decodeT119(data []byte) {
 	reader := binary.NewReader(tea.Decrypt(data))
 	reader.ReadBytes(2)
 	m := reader.ReadTlvMap(2)
-
 	if t130, ok := m[0x130]; ok {
 		c.decodeT130(t130)
 	}
@@ -79,13 +78,20 @@ func (c *QQClient) decodeT119(data []byte) {
 		//a1, noPicSig = readT531(t531)
 	}
 
+	if _, ok := m[0x138]; ok {
+		//readT138(t138) // chg time
+	}
+
 	c.sigInfo = &loginSigInfo{
 		loginBitmap:        0,
+		srmToken:           m[0x16a],
+		t133:               m[0x133],
 		tgt:                m[0x10a],
 		tgtKey:             m[0x10d],
 		userStKey:          m[0x10e],
 		userStWebSig:       m[0x103],
 		sKey:               m[0x120],
+		sKeyExpiredTime:    time.Now().Unix() + 43200, // 86400 / 2
 		d2:                 m[0x143],
 		d2Key:              m[0x305],
 		wtSessionTicketKey: m[0x134],
@@ -97,6 +103,23 @@ func (c *QQClient) decodeT119(data []byte) {
 	c.Nickname = nick
 	c.Age = age
 	c.Gender = gender
+}
+
+// wtlogin.exchange_emp
+func (c *QQClient) decodeT119R(data []byte) {
+	tea := binary.NewTeaCipher(SystemDeviceInfo.TgtgtKey)
+	reader := binary.NewReader(tea.Decrypt(data))
+	reader.ReadBytes(2)
+	m := reader.ReadTlvMap(2)
+	if t120, ok := m[0x120]; ok {
+		c.sigInfo.sKey = t120
+		c.sigInfo.sKeyExpiredTime = time.Now().Unix() + 43200 // 86400 / 2
+		c.Debug("skey updated: %v", c.sigInfo.sKey)
+	}
+	if t11a, ok := m[0x11a]; ok {
+		c.Nickname, c.Age, c.Gender = readT11A(t11a)
+		c.Debug("account info updated: " + c.Nickname)
+	}
 }
 
 func (c *QQClient) decodeT130(data []byte) {

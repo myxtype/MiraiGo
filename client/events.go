@@ -17,6 +17,7 @@ type eventHandlers struct {
 	leaveGroupHandlers          []func(*QQClient, *GroupLeaveEvent)
 	memberJoinedHandlers        []func(*QQClient, *MemberJoinGroupEvent)
 	memberLeavedHandlers        []func(*QQClient, *MemberLeaveGroupEvent)
+	memberCardUpdatedHandlers   []func(*QQClient, *MemberCardUpdatedEvent)
 	permissionChangedHandlers   []func(*QQClient, *MemberPermissionChangedEvent)
 	groupInvitedHandlers        []func(*QQClient, *GroupInvitedRequest)
 	joinRequestHandlers         []func(*QQClient, *UserJoinGroupRequest)
@@ -24,6 +25,9 @@ type eventHandlers struct {
 	newFriendHandlers           []func(*QQClient, *NewFriendEvent)
 	disconnectHandlers          []func(*QQClient, *ClientDisconnectedEvent)
 	logHandlers                 []func(*QQClient, *LogEvent)
+	serverUpdatedHandlers       []func(*QQClient, *ServerUpdatedEvent)
+	notifyHandlers              []func(*QQClient, IGroupNotifyEvent)
+	offlineFileHandlers         []func(*QQClient, *OfflineFileEvent)
 	groupMessageReceiptHandlers sync.Map
 }
 
@@ -67,6 +71,10 @@ func (c *QQClient) OnGroupMemberLeaved(f func(*QQClient, *MemberLeaveGroupEvent)
 	c.eventHandlers.memberLeavedHandlers = append(c.eventHandlers.memberLeavedHandlers, f)
 }
 
+func (c *QQClient) OnGroupMemberCardUpdated(f func(*QQClient, *MemberCardUpdatedEvent)) {
+	c.eventHandlers.memberCardUpdatedHandlers = append(c.eventHandlers.memberCardUpdatedHandlers, f)
+}
+
 func (c *QQClient) OnGroupMemberPermissionChanged(f func(*QQClient, *MemberPermissionChangedEvent)) {
 	c.eventHandlers.permissionChangedHandlers = append(c.eventHandlers.permissionChangedHandlers, f)
 }
@@ -99,8 +107,20 @@ func (c *QQClient) OnDisconnected(f func(*QQClient, *ClientDisconnectedEvent)) {
 	c.eventHandlers.disconnectHandlers = append(c.eventHandlers.disconnectHandlers, f)
 }
 
+func (c *QQClient) OnServerUpdated(f func(*QQClient, *ServerUpdatedEvent)) {
+	c.eventHandlers.serverUpdatedHandlers = append(c.eventHandlers.serverUpdatedHandlers, f)
+}
+
+func (c *QQClient) OnReceivedOfflineFile(f func(*QQClient, *OfflineFileEvent)) {
+	c.eventHandlers.offlineFileHandlers = append(c.eventHandlers.offlineFileHandlers, f)
+}
+
 func (c *QQClient) OnLog(f func(*QQClient, *LogEvent)) {
 	c.eventHandlers.logHandlers = append(c.eventHandlers.logHandlers, f)
+}
+
+func (c *QQClient) OnGroupNotify(f func(*QQClient, IGroupNotifyEvent)) {
+	c.eventHandlers.notifyHandlers = append(c.eventHandlers.notifyHandlers, f)
 }
 
 func NewUinFilterPrivate(uin int64) func(*message.PrivateMessage) bool {
@@ -227,6 +247,17 @@ func (c *QQClient) dispatchMemberLeaveEvent(e *MemberLeaveGroupEvent) {
 	}
 }
 
+func (c *QQClient) dispatchMemberCardUpdatedEvent(e *MemberCardUpdatedEvent) {
+	if e == nil {
+		return
+	}
+	for _, f := range c.eventHandlers.memberCardUpdatedHandlers {
+		cover(func() {
+			f(c, e)
+		})
+	}
+}
+
 func (c *QQClient) dispatchPermissionChanged(e *MemberPermissionChangedEvent) {
 	if e == nil {
 		return
@@ -289,11 +320,33 @@ func (c *QQClient) dispatchNewFriendEvent(e *NewFriendEvent) {
 	}
 }
 
+func (c *QQClient) dispatchGroupNotifyEvent(e IGroupNotifyEvent) {
+	if e == nil {
+		return
+	}
+	for _, f := range c.eventHandlers.notifyHandlers {
+		cover(func() {
+			f(c, e)
+		})
+	}
+}
+
 func (c *QQClient) dispatchDisconnectEvent(e *ClientDisconnectedEvent) {
 	if e == nil {
 		return
 	}
 	for _, f := range c.eventHandlers.disconnectHandlers {
+		cover(func() {
+			f(c, e)
+		})
+	}
+}
+
+func (c *QQClient) dispatchOfflineFileEvent(e *OfflineFileEvent) {
+	if e == nil {
+		return
+	}
+	for _, f := range c.eventHandlers.offlineFileHandlers {
 		cover(func() {
 			f(c, e)
 		})

@@ -6,6 +6,7 @@ import (
 	"github.com/myxtype/MiraiGo/client/pb/msg"
 	"github.com/myxtype/MiraiGo/utils"
 	"github.com/golang/protobuf/proto"
+	"github.com/tidwall/gjson"
 	"math"
 	"reflect"
 	"regexp"
@@ -57,6 +58,15 @@ type (
 		Message    []IMessageElement
 	}
 
+	RichMessage struct {
+		Title      string
+		Summary    string
+		Brief      string
+		Url        string
+		PictureUrl string
+		MusicUrl   string
+	}
+
 	Sender struct {
 		Uin      int64
 		Nickname string
@@ -68,7 +78,13 @@ type (
 		Type() ElementType
 	}
 
+	IRichMessageElement interface {
+		Pack() []*msg.Elem
+	}
+
 	ElementType int
+
+	GroupGift int
 )
 
 const (
@@ -82,6 +98,18 @@ const (
 	File
 	Voice
 	Video
+	LightApp
+	RedBag
+
+	SweetWink      GroupGift = 285
+	HappyCola      GroupGift = 289
+	LuckyBracelet  GroupGift = 290
+	Cappuccino     GroupGift = 299
+	CatWatch       GroupGift = 302
+	FleeceGloves   GroupGift = 307
+	RainbowCandy   GroupGift = 308
+	Stronger       GroupGift = 313
+	LoveMicrophone GroupGift = 367
 )
 
 func (s *Sender) IsAnonymous() bool {
@@ -137,6 +165,8 @@ func (msg *GroupMessage) ToString() (res string) {
 			res += "[Image: " + e.ImageId + "]"
 		case *AtElement:
 			res += e.Display
+		case *RedBagElement:
+			res += "[RedBag:" + e.Title + "]"
 		case *ReplyElement:
 			res += "[Reply:" + strconv.FormatInt(int64(e.ReplySeq), 10) + "]"
 		}
@@ -245,114 +275,9 @@ func ToProtoElems(elems []IMessageElement, generalFlags bool) (r []*msg.Elem) {
 			})
 		}
 	}
-	imgOld := []byte{0x15, 0x36, 0x20, 0x39, 0x32, 0x6B, 0x41, 0x31, 0x00, 0x38, 0x37, 0x32, 0x66, 0x30, 0x36, 0x36, 0x30, 0x33, 0x61, 0x65, 0x31, 0x30, 0x33, 0x62, 0x37, 0x20, 0x20, 0x20, 0x20, 0x20,
-		0x20, 0x35, 0x30, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x7B, 0x30, 0x31, 0x45, 0x39, 0x34, 0x35, 0x31, 0x42, 0x2D, 0x37, 0x30, 0x45, 0x44,
-		0x2D, 0x45, 0x41, 0x45, 0x33, 0x2D, 0x42, 0x33, 0x37, 0x43, 0x2D, 0x31, 0x30, 0x31, 0x46, 0x31, 0x45, 0x45, 0x42, 0x46, 0x35, 0x42, 0x35, 0x7D, 0x2E, 0x70, 0x6E, 0x67, 0x41}
 	for _, elem := range elems {
-		switch e := elem.(type) {
-		case *TextElement:
-			r = append(r, &msg.Elem{
-				Text: &msg.Text{
-					Str: e.Content,
-				},
-			})
-		case *FaceElement:
-			r = append(r, &msg.Elem{
-				Face: &msg.Face{
-					Index: e.Index,
-					Old:   binary.ToBytes(int16(0x1445 - 4 + e.Index)),
-					Buf:   []byte{0x00, 0x01, 0x00, 0x04, 0x52, 0xCC, 0xF5, 0xD0},
-				},
-			})
-		case *AtElement:
-			r = append(r, &msg.Elem{
-				Text: &msg.Text{
-					Str: e.Display,
-					Attr6Buf: binary.NewWriterF(func(w *binary.Writer) {
-						w.WriteUInt16(1)
-						w.WriteUInt16(0)
-						w.WriteUInt16(uint16(len([]rune(e.Display))))
-						w.WriteByte(func() byte {
-							if e.Target == 0 {
-								return 1
-							}
-							return 0
-						}())
-						w.WriteUInt32(uint32(e.Target))
-						w.WriteUInt16(0)
-					}),
-				},
-			})
-			r = append(r, &msg.Elem{Text: &msg.Text{Str: " "}})
-		case *ImageElement:
-			r = append(r, &msg.Elem{
-				CustomFace: &msg.CustomFace{
-					FilePath: e.Filename,
-					Md5:      e.Md5,
-					Flag:     make([]byte, 4),
-					OldData:  imgOld,
-				},
-			})
-		case *GroupImageElement:
-			r = append(r, &msg.Elem{
-				CustomFace: &msg.CustomFace{
-					FileType: 66,
-					Useful:   1,
-					Origin:   1,
-					FileId:   int32(e.FileId),
-					FilePath: e.ImageId,
-					Md5:      e.Md5[:],
-					Flag:     make([]byte, 4),
-					//OldData:  imgOld,
-				},
-			})
-		case *FriendImageElement:
-			r = append(r, &msg.Elem{
-				NotOnlineImage: &msg.NotOnlineImage{
-					FilePath:     e.ImageId,
-					ResId:        e.ImageId,
-					OldPicMd5:    false,
-					PicMd5:       e.Md5,
-					DownloadPath: e.ImageId,
-					Original:     1,
-					PbReserve:    []byte{0x78, 0x02},
-				},
-			})
-		case *ServiceElement:
-			if e.Id == 35 {
-				r = append(r, &msg.Elem{
-					RichMsg: &msg.RichMsg{
-						Template1: append([]byte{1}, binary.ZlibCompress([]byte(e.Content))...),
-						ServiceId: e.Id,
-						MsgResId:  []byte{},
-					},
-				})
-				r = append(r, &msg.Elem{
-					Text: &msg.Text{
-						Str: "你的QQ暂不支持查看[转发多条消息]，请期待后续版本。",
-					},
-				})
-				continue
-			}
-			if e.Id == 33 {
-				r = append(r, &msg.Elem{
-					Text: &msg.Text{Str: e.ResId},
-				})
-				r = append(r, &msg.Elem{
-					RichMsg: &msg.RichMsg{
-						Template1: append([]byte{1}, binary.ZlibCompress([]byte(e.Content))...),
-						ServiceId: e.Id,
-						MsgResId:  []byte{},
-					},
-				})
-				continue
-			}
-			r = append(r, &msg.Elem{
-				RichMsg: &msg.RichMsg{
-					Template1: append([]byte{1}, binary.ZlibCompress([]byte(e.Content))...),
-					ServiceId: e.Id,
-				},
-			})
+		if e, ok := elem.(IRichMessageElement); ok {
+			r = append(r, e.Pack()...)
 		}
 	}
 	if generalFlags {
@@ -450,7 +375,7 @@ func ParseMessageElems(elems []*msg.Elem) []IMessageElement {
 			}
 			if content != "" {
 				// TODO: 解析具体的APP
-				return append(res, NewText(content))
+				return append(res, &LightAppElement{Content: content})
 			}
 		}
 		if elem.VideoFile != nil {
@@ -494,6 +419,15 @@ func ParseMessageElems(elems []*msg.Elem) []IMessageElement {
 				if elem.RichMsg.ServiceId == 33 {
 					continue // 前面一个 elem 已经解析到链接
 				}
+				if isOk := strings.Contains(content, "<?xml"); isOk {
+					res = append(res, NewRichXml(content, int64(elem.RichMsg.ServiceId)))
+					continue
+				} else {
+					if gjson.Valid(content) {
+						res = append(res, NewRichJson(content))
+						continue
+					}
+				}
 				res = append(res, NewText(content))
 			}
 		}
@@ -501,6 +435,8 @@ func ParseMessageElems(elems []*msg.Elem) []IMessageElement {
 			res = append(res, &ImageElement{
 				Filename: elem.CustomFace.FilePath,
 				Size:     elem.CustomFace.Size,
+				Width:    elem.CustomFace.Width,
+				Height:   elem.CustomFace.Height,
 				Url: func() string {
 					if elem.CustomFace.OrigUrl == "" {
 						return "http://gchat.qpic.cn/gchatpic_new/0/0-0-" + strings.ReplaceAll(binary.CalculateImageResourceId(elem.CustomFace.Md5)[1:37], "-", "") + "/0?term=2"
@@ -524,8 +460,42 @@ func ParseMessageElems(elems []*msg.Elem) []IMessageElement {
 				Md5:      elem.NotOnlineImage.PicMd5,
 			})
 		}
+		if elem.QQWalletMsg != nil && elem.QQWalletMsg.AioBody != nil {
+			msgType := elem.QQWalletMsg.AioBody.MsgType
+			if msgType == 2 || msgType == 3 || msgType == 6 {
+				return []IMessageElement{
+					&RedBagElement{
+						MsgType: RedBagMessageType(msgType),
+						Title:   elem.QQWalletMsg.AioBody.Receiver.Title,
+					},
+				}
+			}
+		}
 		if elem.Face != nil {
 			res = append(res, NewFace(elem.Face.Index))
+		}
+		if elem.CommonElem != nil {
+			switch elem.CommonElem.ServiceType {
+			case 3:
+				flash := &msg.MsgElemInfoServtype3{}
+				_ = proto.Unmarshal(elem.CommonElem.PbElem, flash)
+				if flash.FlashTroopPic != nil {
+					res = append(res, &ImageElement{
+						Filename: flash.FlashTroopPic.FilePath,
+						Size:     flash.FlashTroopPic.Size,
+						Width:    flash.FlashTroopPic.Width,
+						Height:   flash.FlashTroopPic.Height,
+						Md5:      flash.FlashTroopPic.Md5,
+					})
+				}
+				if flash.FlashC2CPic != nil {
+					res = append(res, &ImageElement{
+						Filename: flash.FlashC2CPic.FilePath,
+						Size:     flash.FlashC2CPic.FileLen,
+						Md5:      flash.FlashC2CPic.PicMd5,
+					})
+				}
+			}
 		}
 	}
 	return res
@@ -539,7 +509,7 @@ func (forMsg *ForwardMessage) CalculateValidationData(seq, random int32, groupCo
 				FromUin: node.SenderId,
 				MsgSeq:  seq,
 				MsgTime: node.Time,
-				MsgUid:  0x01000000000000000 | (int64(random) & 0xFFFF_FFFF),
+				MsgUid:  0x01000000000000000 | (int64(random) & 0xFFFFFFFF),
 				MutiltransHead: &msg.MutilTransHead{
 					MsgId: 1,
 				},

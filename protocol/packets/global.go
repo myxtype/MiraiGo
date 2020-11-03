@@ -52,12 +52,12 @@ func BuildOicqRequestPacket(uin int64, commandId uint16, encrypt IEncryptMethod,
 	return p.Bytes()
 }
 
-func BuildSsoPacket(seq uint16, commandName, imei string, extData, outPacketSessionId, body, ksid []byte) []byte {
+func BuildSsoPacket(seq uint16, appId uint32, commandName, imei string, extData, outPacketSessionId, body, ksid []byte) []byte {
 	p := binary.NewWriter()
 	p.WriteIntLvPacket(4, func(writer *binary.Writer) {
 		writer.WriteUInt32(uint32(seq))
-		writer.WriteUInt32(537062409) // Android pad (sub app id)
-		writer.WriteUInt32(537062409)
+		writer.WriteUInt32(appId)
+		writer.WriteUInt32(appId)
 		writer.Write([]byte{0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00})
 		if len(extData) == 0 || len(extData) == 4 {
 			writer.WriteUInt32(0x04)
@@ -66,8 +66,9 @@ func BuildSsoPacket(seq uint16, commandName, imei string, extData, outPacketSess
 			writer.Write(extData)
 		}
 		writer.WriteString(commandName)
-		writer.WriteUInt32(0x08)
-		writer.Write(outPacketSessionId)
+		writer.WriteIntLvPacket(4, func(w *binary.Writer) {
+			w.Write(outPacketSessionId)
+		})
 		writer.WriteString(imei)
 		writer.WriteUInt32(0x04)
 		{
@@ -166,7 +167,7 @@ func parseSsoFrame(payload []byte, flag2 byte) (*IncomingPacket, error) {
 	}, nil
 }
 
-func (pkt *IncomingPacket) DecryptPayload(random []byte) ([]byte, error) {
+func (pkt *IncomingPacket) DecryptPayload(random, sessionKey []byte) ([]byte, error) {
 	reader := binary.NewReader(pkt.Payload)
 	if reader.ReadByte() != 2 {
 		return nil, ErrUnknownFlag
@@ -192,6 +193,12 @@ func (pkt *IncomingPacket) DecryptPayload(random []byte) ([]byte, error) {
 			return
 		}()
 		return data, nil
+	}
+	if encryptType == 3 {
+		return func() []byte {
+			d := reader.ReadBytes(reader.Len() - 1)
+			return binary.NewTeaCipher(sessionKey).Decrypt(d)
+		}(), nil
 	}
 	if encryptType == 4 {
 		panic("todo")

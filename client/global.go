@@ -7,6 +7,7 @@ import (
 	"github.com/myxtype/MiraiGo/binary"
 	devinfo "github.com/myxtype/MiraiGo/client/pb"
 	"github.com/myxtype/MiraiGo/client/pb/msg"
+	"github.com/myxtype/MiraiGo/client/pb/oidb"
 	"github.com/myxtype/MiraiGo/message"
 	"github.com/myxtype/MiraiGo/utils"
 	"google.golang.org/protobuf/proto"
@@ -38,6 +39,7 @@ type DeviceInfo struct {
 	APN         []byte
 	Guid        []byte
 	TgtgtKey    []byte
+	Protocol    ClientProtocol
 	Version     *Version
 }
 
@@ -57,13 +59,25 @@ type DeviceInfoFile struct {
 	FingerPrint string `json:"finger_print"`
 	BootId      string `json:"boot_id"`
 	ProcVersion string `json:"proc_version"`
+	Protocol    int    `json:"protocol"` // 0: Pad 1: Phone 2: Watch
 	IMEI        string `json:"imei"`
 }
 
 type groupMessageBuilder struct {
-	MessageSeq    int32
-	MessageCount  int32
 	MessageSlices []*msg.Message
+}
+
+type versionInfo struct {
+	ApkId           string
+	AppId           uint32
+	SortVersionName string
+	BuildTime       uint32
+	ApkSign         []byte
+	SdkVersion      string
+	SSOVersion      uint32
+	MiscBitmap      uint32
+	SubSigmap       uint32
+	MainSigMap      uint32
 }
 
 // default
@@ -88,6 +102,7 @@ var SystemDeviceInfo = &DeviceInfo{
 	IMEI:        "468356291846738",
 	AndroidId:   []byte("MIRAI.123456.001"),
 	APN:         []byte("wifi"),
+	Protocol:    AndroidPad,
 	Version: &Version{
 		Incremental: []byte("5891938"),
 		Release:     []byte("10"),
@@ -124,6 +139,51 @@ func GenRandomDevice() {
 	SystemDeviceInfo.GenNewTgtgtKey()
 }
 
+func genVersionInfo(p ClientProtocol) *versionInfo {
+	switch p {
+	case AndroidPhone: // Dumped by mirai from qq android v8.2.7
+		return &versionInfo{
+			ApkId:           "com.tencent.mobileqq",
+			AppId:           537062845,
+			SortVersionName: "8.2.7",
+			BuildTime:       1571193922,
+			ApkSign:         []byte{0xA6, 0xB7, 0x45, 0xBF, 0x24, 0xA2, 0xC2, 0x77, 0x52, 0x77, 0x16, 0xF6, 0xF3, 0x6E, 0xB6, 0x8D},
+			SdkVersion:      "6.0.0.2413",
+			SSOVersion:      5,
+			MiscBitmap:      184024956,
+			SubSigmap:       0x10400,
+			MainSigMap:      34869472,
+		}
+	case AndroidWatch:
+		return &versionInfo{
+			ApkId:           "com.tencent.mobileqq",
+			AppId:           537061176,
+			SortVersionName: "8.2.7",
+			BuildTime:       1571193922,
+			ApkSign:         []byte{0xA6, 0xB7, 0x45, 0xBF, 0x24, 0xA2, 0xC2, 0x77, 0x52, 0x77, 0x16, 0xF6, 0xF3, 0x6E, 0xB6, 0x8D},
+			SdkVersion:      "6.0.0.2413",
+			SSOVersion:      5,
+			MiscBitmap:      184024956,
+			SubSigmap:       0x10400,
+			MainSigMap:      34869472,
+		}
+	case AndroidPad: // Dumped from qq-hd v5.8.9
+		return &versionInfo{
+			ApkId:           "com.tencent.minihd.qq",
+			AppId:           537065549,
+			SortVersionName: "5.8.9",
+			BuildTime:       1595836208,
+			ApkSign:         []byte{170, 57, 120, 244, 31, 217, 111, 249, 145, 74, 102, 158, 24, 100, 116, 199},
+			SdkVersion:      "6.0.0.2433",
+			SSOVersion:      12,
+			MiscBitmap:      150470524,
+			SubSigmap:       66560,
+			MainSigMap:      1970400,
+		}
+	}
+	return nil
+}
+
 func (info *DeviceInfo) ToJson() []byte {
 	f := &DeviceInfoFile{
 		Display:     string(info.Display),
@@ -135,6 +195,17 @@ func (info *DeviceInfo) ToJson() []byte {
 		BootId:      string(info.BootId),
 		ProcVersion: string(info.ProcVersion),
 		IMEI:        info.IMEI,
+		Protocol: func() int {
+			switch info.Protocol {
+			case AndroidPad:
+				return 0
+			case AndroidPhone:
+				return 1
+			case AndroidWatch:
+				return 2
+			}
+			return 0
+		}(),
 	}
 	d, _ := json.Marshal(f)
 	return d
@@ -157,6 +228,14 @@ func (info *DeviceInfo) ReadJson(d []byte) error {
 	info.ProcVersion = []byte(f.ProcVersion)
 	info.IMEI = f.IMEI
 	info.AndroidId = SystemDeviceInfo.Display
+	switch f.Protocol {
+	case 1:
+		info.Protocol = AndroidPhone
+	case 2:
+		info.Protocol = AndroidWatch
+	default:
+		info.Protocol = AndroidPad
+	}
 	SystemDeviceInfo.GenNewGuid()
 	SystemDeviceInfo.GenNewTgtgtKey()
 	return nil
@@ -245,7 +324,22 @@ func (c *QQClient) parseTempMessage(msg *msg.Message) *message.TempMessage {
 func (c *QQClient) parseGroupMessage(m *msg.Message) *message.GroupMessage {
 	group := c.FindGroup(m.Head.GroupInfo.GroupCode)
 	if group == nil {
-		return nil
+		c.Debug("sync group %v.", m.Head.GroupInfo.GroupCode)
+		info, err := c.GetGroupInfo(m.Head.GroupInfo.GroupCode)
+		if err != nil {
+			c.Error("error to sync group %v : %v", m.Head.GroupInfo.GroupCode, err)
+			return nil
+		}
+		group = info
+		c.GroupList = append(c.GroupList, info)
+	}
+	if len(group.Members) == 0 {
+		mem, err := c.GetGroupMembers(group)
+		if err != nil {
+			c.Error("error to sync group %v member : %v", m.Head.GroupInfo.GroupCode, err)
+			return nil
+		}
+		group.Members = mem
 	}
 	var anonInfo *msg.AnonymousGroupMessage
 	for _, e := range m.Body.RichText.Elems {
@@ -263,7 +357,16 @@ func (c *QQClient) parseGroupMessage(m *msg.Message) *message.GroupMessage {
 	} else {
 		mem := group.FindMember(m.Head.FromUin)
 		if mem == nil {
-			return nil
+			info, _ := c.getMemberInfo(group.Code, m.Head.FromUin)
+			if info == nil {
+				return nil
+			}
+			mem = info
+			group.Members = append(group.Members, mem)
+			go c.dispatchNewMemberEvent(&MemberJoinGroupEvent{
+				Group:  group,
+				Member: info,
+			})
 		}
 		sender = &message.Sender{
 			Uin:      mem.Uin,
@@ -272,14 +375,62 @@ func (c *QQClient) parseGroupMessage(m *msg.Message) *message.GroupMessage {
 			IsFriend: c.FindFriend(mem.Uin) != nil,
 		}
 	}
-	g := &message.GroupMessage{
+	var g *message.GroupMessage
+	g = &message.GroupMessage{
 		Id:        m.Head.MsgSeq,
 		GroupCode: group.Code,
 		GroupName: string(m.Head.GroupInfo.GroupName),
 		Sender:    sender,
 		Time:      m.Head.MsgTime,
 		Elements:  message.ParseMessageElems(m.Body.RichText.Elems),
-		//OriginalElements: m.Body.RichText.Elems,
+	}
+	var extInfo *msg.ExtraInfo
+	// pre parse
+	for _, elem := range m.Body.RichText.Elems {
+		// is rich long msg
+		if elem.GeneralFlags != nil && elem.GeneralFlags.LongTextResid != "" {
+			if f := c.GetForwardMessage(elem.GeneralFlags.LongTextResid); f != nil && len(f.Nodes) == 1 {
+				g = &message.GroupMessage{
+					Id:        m.Head.MsgSeq,
+					GroupCode: group.Code,
+					GroupName: string(m.Head.GroupInfo.GroupName),
+					Sender:    sender,
+					Time:      m.Head.MsgTime,
+					Elements:  f.Nodes[0].Message,
+				}
+			}
+		}
+		if elem.ExtraInfo != nil {
+			extInfo = elem.ExtraInfo
+		}
+	}
+	if !sender.IsAnonymous() {
+		mem := group.FindMember(m.Head.FromUin)
+		groupCard := m.Head.GroupInfo.GroupCard
+		if extInfo != nil && len(extInfo.GroupCard) > 0 && extInfo.GroupCard[0] == 0x0A {
+			buf := oidb.D8FCCommCardNameBuf{}
+			if err := proto.Unmarshal(extInfo.GroupCard, &buf); err == nil && len(buf.RichCardName) > 0 {
+				groupCard = ""
+				for _, e := range buf.RichCardName {
+					groupCard += string(e.Text)
+				}
+			}
+		}
+		if m.Head.GroupInfo != nil && groupCard != "" && mem.CardName != groupCard {
+			old := mem.CardName
+			if mem.Nickname == groupCard {
+				mem.CardName = ""
+			} else {
+				mem.CardName = groupCard
+			}
+			if old != mem.CardName {
+				go c.dispatchMemberCardUpdatedEvent(&MemberCardUpdatedEvent{
+					Group:   group,
+					OldCard: old,
+					Member:  mem,
+				})
+			}
+		}
 	}
 	if m.Body.RichText.Ptt != nil {
 		g.Elements = []message.IMessageElement{
@@ -299,7 +450,7 @@ func (c *QQClient) parseGroupMessage(m *msg.Message) *message.GroupMessage {
 
 func (b *groupMessageBuilder) build() *msg.Message {
 	sort.Slice(b.MessageSlices, func(i, j int) bool {
-		return b.MessageSlices[i].Content.PkgIndex < b.MessageSlices[i].Content.PkgIndex
+		return b.MessageSlices[i].Content.PkgIndex < b.MessageSlices[j].Content.PkgIndex
 	})
 	base := b.MessageSlices[0]
 	for _, m := range b.MessageSlices[1:] {

@@ -4,6 +4,10 @@ qq-android协议的golang实现 移植于mirai
 # 警告
 本项目为协议实现，api非常原始，并不推荐使用。
 
+建议基于 [go-cqhttp](https://github.com/Mrs4s/go-cqhttp) 使用框架开发。
+
+同时提供不基于 CQHTTP 的原生框架 [MiraiGo-Template](https://github.com/Logiase/MiraiGo-Template) 进行开发。
+
 # 已完成功能/开发计划
 #### 登录
 - [x] 账号密码登录
@@ -40,6 +44,7 @@ qq-android协议的golang实现 移植于mirai
 - [x] 新好友
 - [x] 新好友请求
 - [x] 客户端离线
+- [x] 群提示 (戳一戳/运气王等) 
 
 #### 主动操作
 > 为防止滥用，将不支持主动邀请新成员进群
@@ -55,7 +60,7 @@ qq-android协议的golang实现 移植于mirai
 - [x] 处理被邀请加群请求
 - [x] 处理好友请求
 - [x] 撤回群消息
-- [ ] 群公告设置
+- [x] 群公告设置
 - [x] 获取群文件下载链接
 - [x] 群设置 (全体禁言/群名)
 - [x] 修改群成员Card
@@ -63,3 +68,5 @@ qq-android协议的golang实现 移植于mirai
 - [ ] ~~群成员邀请~~
 - [x] 群成员禁言/解除禁言
 - [x] T出群成员
+- [x] 戳一戳群友
+- [x] 获取陌生人信息
